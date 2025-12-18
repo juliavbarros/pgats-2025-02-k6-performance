@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # API Checkout Rest e GraphQL
 
 Se você é aluno da Pós-Graduação em Automação de Testes de Software (Turma 2), faça um fork desse repositório e boa sorte em seu trabalho de conclusão da disciplina.
@@ -216,3 +217,6 @@ Acesse o playground GraphQL em [http://localhost:4000/graphql](http://localhost:
 ## Documentação
 - Swagger disponível em `/api-docs`
 - Playground GraphQL disponível em `/graphql`
+=======
+# pgats-2025-02-k6-performance
+>>>>>>> 398fb8d8a4d084e237f388a3b86d24f5ef68eb5c
