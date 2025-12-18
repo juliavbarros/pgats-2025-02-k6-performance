@@ -1,222 +1,226 @@
-<<<<<<< HEAD
-# API Checkout Rest e GraphQL
+# Teste de Performance com K6 – API Checkout (REST + GraphQL)
 
-Se você é aluno da Pós-Graduação em Automação de Testes de Software (Turma 2), faça um fork desse repositório e boa sorte em seu trabalho de conclusão da disciplina.
+Este repositório contém a API de Checkout (REST e GraphQL) e um projeto de **testes automatizados de performance com K6**, atendendo aos requisitos do desafio.
 
-## Instalação
+## Pré-requisitos
+
+- Node.js (LTS recomendado)
+- NPM
+- K6 instalado e disponível no PATH (`k6 version`)
+
+## Como rodar a API
+
+Instalar dependências
 
 ```bash
-npm install express jsonwebtoken swagger-ui-express apollo-server-express graphql
+npm install
 ```
 
-## Exemplos de chamadas
+Subir REST (porta 3000)
 
-### REST
-
-#### Registro de usuário
 ```bash
-curl -X POST http://localhost:3000/api/users/register \
-	-H "Content-Type: application/json" \
-	-d '{"name":"Novo Usuário","email":"novo@email.com","password":"senha123"}'
+npm run start:rest
 ```
 
-#### Login
+Subir GraphQL (porta 4000)
+
 ```bash
-curl -X POST http://localhost:3000/api/users/login \
-	-H "Content-Type: application/json" \
-	-d '{"email":"novo@email.com","password":"senha123"}'
+npm run start:gql
 ```
 
-#### Checkout (boleto)
+## Como rodar o teste de performance (K6)
+
+### Executar o cenário REST (checkout com autenticação)
+
+#### Com a API REST em execução:
 ```bash
-curl -X POST http://localhost:3000/api/checkout \
-	-H "Content-Type: application/json" \
-	-H "Authorization: Bearer <TOKEN_JWT>" \
-	-d '{
-		"items": [{"productId":1,"quantity":2}],
-		"freight": 20,
-		"paymentMethod": "boleto"
-	}'
+k6 run -e BASE_URL=http://localhost:3000 test/k6/scenarios/checkout.rest.perf.js
 ```
 
-#### Checkout (cartão de crédito)
+### Relatório de Execução (HTML)
+
+Ao final da execução é gerado:
+
+test/k6/reports/summary.html
+
+Obs.: a pasta test/k6/reports contém um .gitkeep para garantir que o diretório exista no repositório.
+
+
+## Arquitetura dos testes (test/k6)
+
 ```bash
-curl -X POST http://localhost:3000/api/checkout \
-	-H "Content-Type: application/json" \
-	-H "Authorization: Bearer <TOKEN_JWT>" \
-	-d '{
-		"items": [{"productId":2,"quantity":1}],
-		"freight": 15,
-		"paymentMethod": "credit_card",
-		"cardData": {
-			"number": "4111111111111111",
-			"name": "Nome do Titular",
-			"expiry": "12/30",
-			"cvv": "123"
-		}
-	}'
+test/k6/
+  helpers/     -> funções reutilizáveis (http, env, auth, checks, trends, data)
+  data/        -> datasets para data-driven testing (JSON)
+  scenarios/   -> cenários executáveis do K6
+  reports/     -> saída do relatório (HTML) + .gitkeep
 ```
 
-### GraphQL
+## Onde cada conceito foi aplicado (com trechos)
 
-#### Registro de usuário
-Mutation:
-```graphql
-mutation Register($name: String!, $email: String!, $password: String!) {
-  register(name: $name, email: $email, password: $password) {
-    email
-    name
-  }
-}
+### 1) Variável de Ambiente
+```
+test/k6/helpers/env.js
+```
+Usa __ENV para configurar o teste sem alterar código.
 
-Variables:
-{
-  "name": "Julio",
-  "email": "julio@abc.com",
-  "password": "123456"
-}
+```js
+export const ENV = {
+  BASE_URL: __ENV.BASE_URL || "http://localhost:3000",
+  MAX_VUS: parseInt(__ENV.MAX_VUS || "10", 10),
+  RAMP_UP: __ENV.RAMP_UP || "10s",
+  STEADY: __ENV.STEADY || "20s",
+  RAMP_DOWN: __ENV.RAMP_DOWN || "10s",
+};
 ```
 
-#### Login
-Mutation:
-```graphql
-mutation Login($email: String!, $password: String!) {
-  login(email: $email, password: $password) {
-    token
-  }
-}
+### 2) Stages
+```
+test/k6/scenarios/checkout.rest.perf.js
+```
+Define subida, carga constante e descida.
 
-Variables:
-{
-  "email": "alice@email.com",
-  "password": "123456"
-}
+```js
+stages: [
+  { duration: ENV.RAMP_UP, target: ENV.MAX_VUS },
+  { duration: ENV.STEADY, target: ENV.MAX_VUS },
+  { duration: ENV.RAMP_DOWN, target: 0 },
+],
 ```
 
+### 3) Thresholds
+```
+test/k6/scenarios/checkout.rest.perf.js
+```
+Critérios automáticos de aprovação/reprovação do teste.
 
-#### Checkout (boleto)
-Mutation (envie o token JWT no header Authorization: Bearer <TOKEN_JWT>):
-```graphql
-mutation Checkout($items: [CheckoutItemInput!]!, $freight: Float!, $paymentMethod: String!, $cardData: CardDataInput) {
-  checkout(items: $items, freight: $freight, paymentMethod: $paymentMethod, cardData: $cardData) {
-    freight
-    items {
-      productId
-      quantity
-    }
-    paymentMethod
-    userId
-    valorFinal
-  }
-}
+```js
+thresholds: {
+  http_req_failed: ["rate<0.02"],
+  http_req_duration: ["p(95)<500"],
+  auth_ms: ["p(95)<300"],
+  checkout_ms: ["p(95)<400"],
+},
+```
 
-Variables:
-{
-  "items": [
-    {
-      "productId": 1,
-      "quantity": 2
-    },
-    {
-      "productId": 2,
-      "quantity": 1
-    }
-  ],
-  "freight": 10,
-  "paymentMethod": "boleto"
+### 4) Checks
+```
+test/k6/helpers/checks.js
+```
+Valida respostas durante o teste (sanidade).
+
+```js
+export function checkOk(res, name = "request ok") {
+  return check(res, {
+    [`${name}: status 2xx`]: (r) => r.status >= 200 && r.status < 300,
+  });
 }
 ```
 
-#### Checkout (cartão de crédito)
-Mutation (envie o token JWT no header Authorization: Bearer <TOKEN_JWT>):
-```graphql
-mutation {
-	checkout(
-		items: [{productId: 2, quantity: 1}],
-		freight: 15,
-		paymentMethod: "credit_card",
-		cardData: {
-			number: "4111111111111111",
-			name: "Nome do Titular",
-			expiry: "12/30",
-			cvv: "123"
-		}
-	) {
-		valorFinal
-		paymentMethod
-		freight
-		items { productId quantity }
-	}
-}
+### 5) Helpers
+```
+test/k6/helpers/
+```
+Organização do código reutilizável (ex.: wrapper HTTP).
 
-Variables:
-{
-  "items": [
-    {
-      "productId": 1,
-      "quantity": 2
-    },
-    {
-      "productId": 2,
-      "quantity": 1
-    }
-  ],
-  "freight": 10,
-  "paymentMethod": "credit_card",
-  "cardData": {
-    "cvv": "123",
-    "expiry": "10/04",
-    "name": "Julio Costa",
-    "number": "1234432112344321"
-  }
+```js
+export function postJson(url, body, headers = {}) {
+  return http.post(url, JSON.stringify(body), {
+    headers: { "Content-Type": "application/json", ...headers },
+  });
 }
 ```
 
-#### Consulta de usuários
-Query:
-```graphql
-query Users {
-  users {
-    email
-    name
-  }
+### 6) Trends
+```
+test/k6/helpers/trends.js
+```
+Métricas customizadas de tempo para autenticação e checkout.
+
+```js
+export const TRENDS = {
+  auth_ms: new Trend("auth_ms"),
+  checkout_ms: new Trend("checkout_ms"),
+  valor_final: new Trend("valor_final"),
+};
+```
+Uso no cenário
+```js
+TRENDS.checkout_ms.add(Date.now() - t0);
+
+```
+
+### 7) Faker
+```
+test/k6/helpers/auth.js
+```
+Gera dados dinâmicos de usuário (evita conflito de email).
+
+```js
+const email = `${Faker.internet.email().toLowerCase()}.${Date.now()}@mail.com`;
+
+```
+
+### 8) Uso de Token de Autenticação
+```
+test/k6/helpers/auth.js + test/k6/scenarios/checkout.rest.perf.js
+```
+O token vem do login e é enviado no header do checkout.
+```js
+const token = r2.json("token");
+
+```
+```js
+const headers = { Authorization: `Bearer ${token}` };
+```
+
+### 9) Reaproveitamento de Resposta
+```
+test/k6/helpers/auth.js
+```
+Reaproveita o token obtido no login (resposta HTTP) para chamadas seguintes.
+```js
+const token = r2.json("token");
+return { token, email };
+
+```
+
+### 10) Data-Driven Testing
+```
+test/k6/data/checkout-datasets.json + test/k6/helpers/data.js
+```
+Usa datasets externos em JSON e alterna por iteração.
+```js
+export function pickDataset(iter) {
+  return datasets[iter % datasets.length];
 }
 ```
 
-## Como rodar
-
-### REST
-```bash
-node rest/server.js
+### 11) Groups
 ```
-Acesse a documentação Swagger em [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
-
-### GraphQL
-```bash
-node graphql/app.js
+test/k6/scenarios/checkout.rest.perf.js
 ```
-Acesse o playground GraphQL em [http://localhost:4000/graphql](http://localhost:4000/graphql)
+Agrupa etapas para ficar mais legível no output/relatório.
+```js
+group("Auth (register + login)", () => {
+  group("Checkout (data-driven)", () => {
+    // ...
+  });
+})
+```
 
-## Endpoints REST
-- POST `/api/users/register` — Registro de usuário
-- POST `/api/users/login` — Login (retorna token JWT)
-- POST `/api/checkout` — Checkout (requer token JWT)
+### 12) Relatório HTML
+```
+test/k6/scenarios/checkout.rest.perf.js
+```
+Gera relatório de execução em HTML ao final.
+```js
+export function handleSummary(data) {
+  return {
+    "test/k6/reports/summary.html": htmlReport(data),
+  };
+}
+```
 
-## Regras de Checkout
-- Só pode fazer checkout com token JWT válido
-- Informe lista de produtos, quantidades, valor do frete, método de pagamento e dados do cartão se necessário
-- 5% de desconto no valor total se pagar com cartão
-- Resposta do checkout contém valor final
 
-## Banco de dados
-- Usuários e produtos em memória (veja arquivos em `src/models`)
 
-## Testes
-- Para testes automatizados, importe o `app` de `rest/app.js` ou `graphql/app.js` sem o método `listen()`
-
-## Documentação
-- Swagger disponível em `/api-docs`
-- Playground GraphQL disponível em `/graphql`
-=======
-# pgats-2025-02-k6-performance
->>>>>>> 398fb8d8a4d084e237f388a3b86d24f5ef68eb5c
