@@ -1,0 +1,20 @@
+# dependências
+node_modules/
+
+# cobertura de testes
+coverage/
+.nyc_output/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# variáveis de ambiente
+.env
+
+# editor / sistema
+.vscode/
+.DS_Store

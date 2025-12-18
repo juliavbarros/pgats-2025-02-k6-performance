@@ -1,0 +1,21 @@
+[
+  {
+    "name": "boleto_basico",
+    "freight": 10,
+    "paymentMethod": "boleto",
+    "items": [
+      { "productId": 1, "quantity": 2 },
+      { "productId": 2, "quantity": 1 }
+    ]
+  },
+  {
+    "name": "cartao_com_desconto",
+    "freight": 10,
+    "paymentMethod": "credit_card",
+    "cardData": { "number": "4111111111111111", "name": "Teste K6", "expiry": "12/30", "cvv": "123" },
+    "items": [
+      { "productId": 1, "quantity": 1 },
+      { "productId": 2, "quantity": 2 }
+    ]
+  }
+]
